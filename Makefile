@@ -9,12 +9,17 @@ ifeq ($(NDK),)
 $(error no ndk found - set ANDROID_HOME or ANDROID_NDK)
 endif
 
+NDK_BUILD := ndk-build
+ifeq ($(OS),Windows_NT)
+NDK_BUILD := $(NDK_BUILD).cmd
+endif
+
 .PHONY: andprof dist check clean
 
 PROJECT=android-ndk-profiler
 
 andprof:
-	$(NDK)/ndk-build $(PROJECT) V=1
+	$(NDK)/$(NDK_BUILD) $(PROJECT) V=1
 
 ifeq ($(VERSION),)
 dist:
@@ -42,5 +47,5 @@ check:
 	$(MAKE) -C test check
 
 clean:
-	$(NDK)/ndk-build clean
+	$(NDK)/$(NDK_BUILD) clean
 	$(MAKE) -C test clean
