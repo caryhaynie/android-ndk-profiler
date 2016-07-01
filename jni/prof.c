@@ -63,7 +63,8 @@
 
 #define LOGI(...)  __android_log_print(ANDROID_LOG_INFO, "PROFILING", __VA_ARGS__)
 
-#define DEFAULT_GMON_OUT "/sdcard/gmon.out"
+/* TODO :: This should probably try a couple places, depending on how the processes' permissions are setup. */
+#define DEFAULT_GMON_OUT "./gprof.profile"
 
 typedef struct {
 	unsigned short *froms;
