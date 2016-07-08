@@ -54,7 +54,10 @@
 #include <stdint.h>         /* for uint32_t, uint16_t, etc */
 #include <stdio.h>          /* for FILE */
 #include <stdlib.h>         /* for getenv */
+#include <sys/stat.h>
 #include <sys/time.h>       /* for setitimer, etc */
+#include <sys/types.h>
+#include <unistd.h>
 
 #include "gmon.h"
 #include "gmon_out.h"
@@ -65,6 +68,10 @@
 
 /* TODO :: This should probably try a couple places, depending on how the processes' permissions are setup. */
 #define DEFAULT_GMON_OUT "./gprof.profile"
+
+#define handle_error(msg) do { perror(msg); exit(EXIT_FAILURE); } while (0)
+#define handle_errno(err, msg) do { errno = err; handle_error(msg); } while (0)
+
 
 typedef struct {
 	unsigned short *froms;
@@ -287,6 +294,26 @@ static int cg_init()
 	return 1;
 }
 
+static char* get_app_path()
+{
+	const char* appLink = "/proc/self/exe";
+	struct stat lstatBuffer;
+	if (lstat(appLink, &lstatBuffer) == -1)
+	{
+		handle_error("lstat");
+	}
+
+	size_t linkSiz = lstatBuffer.st_size + 1;
+	char* pathBuffer = malloc(linkSiz);
+	int err = readlink(appLink, pathBuffer, linkSiz);
+	if (err == -1)
+	{
+		handle_error("readlink");
+	}
+	pathBuffer[linkSiz-1] = '\0';
+	return pathBuffer;
+}
+
 __attribute__((visibility("default")))
 void monstartup(const char *libname)
 {
@@ -297,36 +324,41 @@ void monstartup(const char *libname)
 		return;
 	}
 
-	if (strstr(libname, ".so")) {
-		LOGI("start profiling shared library %s", libname);
+	char* target = (libname == NULL) ? get_app_path() : strdup(libname);
+	if (strstr(target, ".so")) {
+		LOGI("start profiling shared library %s", target);
 		opt_is_shared_lib = 1;
 	} else {
-		LOGI("start profiling executable %s", libname);
+		LOGI("start profiling executable %s", target);
 		opt_is_shared_lib = 0;
 	}
 
-	s_maps = read_maps(self, libname);
+	s_maps = read_maps(self, target);
 
 	if (s_maps == NULL) {
 		systemMessage(0, "No maps found");
-		return;
+		goto cleanup;
 	}
 
 	process_init();
 
 	if (!histogram_init()) {
-		return;
+		goto cleanup;
 	}
 
-	LOGI("Profile %s, pc: 0x%x-0x%x, base: 0x%d", libname,
+	LOGI("Profile %s, pc: 0x%x-0x%x, base: 0x%d", target,
 	     process.low_pc, process.high_pc, s_maps->base);
 
 	if (!cg_init()) {
-		return;
+		goto cleanup;
 	}
 
 	int sample_freq = select_frequency();
 	add_profile_handler(sample_freq);
+
+cleanup:
+	free(target);
+	return;
 }
 
 static const char *get_gmon_out(void)
