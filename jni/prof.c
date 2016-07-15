@@ -297,21 +297,15 @@ static int cg_init()
 static char* get_app_path()
 {
 	const char* appLink = "/proc/self/exe";
-	struct stat lstatBuffer;
-	if (lstat(appLink, &lstatBuffer) == -1)
-	{
-		handle_error("lstat");
-	}
-
-	size_t linkSiz = lstatBuffer.st_size + 1;
-	char* pathBuffer = malloc(linkSiz);
-	int err = readlink(appLink, pathBuffer, linkSiz);
+	char pathBuffer[PATH_MAX + 1] = { 0 }; // can't lstat symlinks under /proc ...
+	int err = readlink(appLink, pathBuffer, PATH_MAX);
 	if (err == -1)
 	{
 		handle_error("readlink");
 	}
-	pathBuffer[linkSiz-1] = '\0';
-	return pathBuffer;
+	pathBuffer[PATH_MAX] = '\0';
+	LOGI("actual application path: %s", pathBuffer);
+	return strdup(pathBuffer);
 }
 
 __attribute__((visibility("default")))
