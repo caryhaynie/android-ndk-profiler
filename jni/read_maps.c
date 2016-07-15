@@ -44,37 +44,39 @@ struct proc_map *read_maps(FILE *fp, const char *lname)
 		len--;
 		s_line[len] = 0;
 
-		if (namelen < len
-		    && strcmp(lname, &s_line[len - namelen]) == 0) {
-			char c[1];
-			char perm[4];
-			int lo, base, hi;
-			sscanf(s_line, "%x-%x %4c %x %c", &lo, &hi, perm, &base, c);
+		int dev_major = 0, dev_minor = 0, inode = 0;
+		char perm[4] = { 0 };
+		char path[512] = { 0 };
+		int lo = 0, base = 0, hi = 0;
+		sscanf(s_line, "%x-%x %4c %x %u:%u %u %s", &lo, &hi, perm, &base, &dev_major, &dev_minor, &inode, path);
 
-			if (results == NULL) {
-				current = malloc(sizeof(struct proc_map));
-				if (!current) {
-					LOGI("error allocating memory");
-					return NULL;
-				}
-				current->next = NULL;
-				results = current;
-			} else {
-				current->next = malloc(sizeof(struct proc_map));
-				current = current->next;
-				if (!current) {
-					LOGI("error allocating memory");
-					return NULL;
-				}
-				current->next = NULL;
+		/* ignore anonymously mapped regions, ie, regions that don't have an inode defined. */
+		if (inode == 0) { continue; }
+
+		if (results == NULL) {
+			current = malloc(sizeof(struct proc_map));
+			if (!current) {
+				LOGI("error allocating memory");
+				return NULL;
 			}
-
-			LOGI("process '%s', base = 0x%x, lo = 0x%x, hi = 0x%x", lname, base, lo, hi);
-
-			current->base = base;
-			current->lo = lo;
-			current->hi = hi;
+			current->next = NULL;
+			results = current;
+		} else {
+			current->next = malloc(sizeof(struct proc_map));
+			current = current->next;
+			if (!current) {
+				LOGI("error allocating memory");
+				return NULL;
+			}
+			current->next = NULL;
 		}
+
+		LOGI("source '%s', base = 0x%x, lo = 0x%x, hi = 0x%x", path, base, lo, hi);
+
+		current->base = base;
+		current->lo = lo;
+		current->hi = hi;
+
 	}
 	return results;
 }
@@ -85,10 +87,9 @@ unsigned int get_real_address(const struct proc_map *maps,
 	const struct proc_map *mp = maps;
 	while (mp) {
 		if (fake >= mp->lo && fake <= mp->hi) {
-			if (opt_is_shared_lib) {
-				return fake - mp->lo;
-			}
-			return fake;
+			unsigned int real = fake - mp->lo;
+			/* if real > fake, assume integer underflow and return fake instead. */
+			return (real > fake) ? fake : real;
 		}
 		mp = mp->next;
 	}
