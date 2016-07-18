@@ -19,7 +19,7 @@
 #define LOGI(...)  do { printf(__VA_ARGS__) ; printf("\n"); } while (0)
 #endif
 
-static char s_line[256];
+static char s_line[512];
 extern int opt_is_shared_lib;
 
 void free_maps(struct proc_map *s)
@@ -44,14 +44,29 @@ struct proc_map *read_maps(FILE *fp, const char *lname)
 		len--;
 		s_line[len] = 0;
 
+		#ifdef DEBUG_THE_THINGS
+		LOGI("Parsing: %s", s_line);
+		#endif //DEBUG_THE_THINGS
 		int dev_major = 0, dev_minor = 0, inode = 0;
 		char perm[4] = { 0 };
 		char path[512] = { 0 };
 		int lo = 0, base = 0, hi = 0;
-		sscanf(s_line, "%x-%x %4c %x %u:%u %u %s", &lo, &hi, perm, &base, &dev_major, &dev_minor, &inode, path);
+		sscanf(s_line, "%x-%x %4c %x %3x:%3x %u %s", &lo, &hi, perm, &base, &dev_major, &dev_minor, &inode, path);
 
 		/* ignore anonymously mapped regions, ie, regions that don't have an inode defined. */
-		if (inode == 0) { continue; }
+
+		if (inode == 0) {
+			if (path == NULL || strlen(path) == 0) {
+				#ifdef DEBUG_THE_THINGS
+				LOGI("Ignoring anonymously mapped region: 0x%x - 0x%x", lo, hi);
+				#endif //DEBUG_THE_THINGS
+			} else {
+				#ifdef DEBUG_THE_THINGS
+				LOGI("Region 0x%x - 0x%x from '%s' doesn't have an inode associated with it, ignoring.", lo, hi, path);
+				#endif //DEBUG_THE_THINGS
+			}
+			continue;
+		}
 
 		if (results == NULL) {
 			current = malloc(sizeof(struct proc_map));
@@ -71,7 +86,9 @@ struct proc_map *read_maps(FILE *fp, const char *lname)
 			current->next = NULL;
 		}
 
+		#ifdef DEBUG_THE_THINGS
 		LOGI("source '%s', base = 0x%x, lo = 0x%x, hi = 0x%x", path, base, lo, hi);
+		#endif
 
 		current->base = base;
 		current->lo = lo;
